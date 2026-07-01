@@ -3,6 +3,18 @@
 Production-style PyTorch project for brain tumor **segmentation** on synthetic MRI-style images. It covers data generation, U-Net training, ONNX export, FastAPI serving, Docker deployment, and Render hosting.
 
 **Medical disclaimer:** This is a portfolio/research engineering demo, not a clinically validated diagnostic product.
+## Dataset
+
+This project uses the **[Brain Tumor Segmentation (BraTS) 2020](https://www.med.upenn.edu/cbica/brats2020/data.html)** dataset provided by the **Center for Biomedical Image Computing and Analytics (CBICA), University of Pennsylvania**.
+
+The BraTS 2020 dataset contains multi-institutional, pre-operative, multimodal MRI scans of glioma patients along with expert-annotated tumor segmentation masks. Each subject includes the following MRI modalities:
+
+* T1-weighted (T1)
+* T1-weighted with contrast enhancement (T1CE)
+* T2-weighted (T2)
+* T2-FLAIR (FLAIR)
+
+The segmentation labels correspond to different tumor sub-regions, including enhancing tumor, tumor core, and peritumoral edema.
 
 ## How It Works
 
