@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Data & artifacts
+data/processed/
+data/test_processed/
+data/raw/
+data/external/
+checkpoints/
+*.pt
+*.onnx
+
+# JavaScript artifacts accidentally created by npm installs
+node_modules/
+package.json
+package-lock.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log
