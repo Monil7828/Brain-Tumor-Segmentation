@@ -30,13 +30,20 @@ def main() -> None:
 
     data_dir = ROOT / config["data"]["data_dir"]
     if not (data_dir / "manifest.json").exists():
-        print("Dataset not found — generating synthetic data...")
-        generate_dataset(
-            output_dir=data_dir,
-            num_samples=200,
-            image_size=config["data"]["image_size"],
-            seed=config["project"]["seed"],
-        )
+        data_source = config["data"].get("source", "synthetic")
+        if data_source == "synthetic":
+            print("Dataset not found - generating synthetic data...")
+            generate_dataset(
+                output_dir=data_dir,
+                num_samples=200,
+                image_size=config["data"]["image_size"],
+                seed=config["project"]["seed"],
+            )
+        else:
+            raise FileNotFoundError(
+                f"Dataset manifest not found at {data_dir / 'manifest.json'}. "
+                "Run `python scripts/prepare_brats.py --config configs/brats.yaml --overwrite` first."
+            )
 
     train_loader, val_loader = build_dataloaders(config)
     trainer = Trainer(config)

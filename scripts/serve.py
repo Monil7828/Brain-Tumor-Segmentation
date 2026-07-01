@@ -26,7 +26,11 @@ def main() -> None:
     deploy_cfg = config["deployment"]
     model_path = args.model or deploy_cfg["model_path"]
 
-    load_model(str(ROOT / model_path), image_size=deploy_cfg["image_size"])
+    load_model(
+        str(ROOT / model_path),
+        image_size=deploy_cfg["image_size"],
+        tumor_threshold=deploy_cfg.get("tumor_threshold", 0.005),
+    )
 
     uvicorn.run(
         "src.deployment.api:app",

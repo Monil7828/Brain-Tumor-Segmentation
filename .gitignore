@@ -9,6 +9,9 @@ venv/
 # Data & artifacts
 data/processed/
 data/test_processed/
+data/test_multichannel/
+data/BraTS/
+data/Pre-operative_TCGA_GBM_NIfTI_and_Segmentations/
 data/raw/
 data/external/
 checkpoints/

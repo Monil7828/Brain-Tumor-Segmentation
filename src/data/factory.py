@@ -21,21 +21,23 @@ def _default_num_workers(configured: int) -> int:
 
 def build_dataloaders(config: dict[str, Any]) -> tuple[DataLoader, DataLoader]:
     data_cfg = config["data"]
+    model_cfg = config["model"]
     seed = config["project"]["seed"]
     num_workers = _default_num_workers(data_cfg["num_workers"])
+    in_channels = model_cfg.get("in_channels", 1)
 
     train_ds = SegmentationDataset(
         data_dir=data_cfg["data_dir"],
         split="train",
         train_ratio=data_cfg["train_split"],
-        transform=build_train_transforms(data_cfg["image_size"], config["augmentation"]["train"]),
+        transform=build_train_transforms(data_cfg["image_size"], config["augmentation"]["train"], in_channels),
         seed=seed,
     )
     val_ds = SegmentationDataset(
         data_dir=data_cfg["data_dir"],
         split="val",
         train_ratio=data_cfg["train_split"],
-        transform=build_val_transforms(data_cfg["image_size"]),
+        transform=build_val_transforms(data_cfg["image_size"], in_channels),
         seed=seed,
     )
 

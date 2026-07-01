@@ -1,132 +1,125 @@
-# End-to-End Production Image Segmentation Pipeline
+# End-to-End Brain Tumor Segmentation Pipeline
 
-A production-grade **brain tumor segmentation** pipeline built with PyTorch — designed to demonstrate the skills ML engineers use daily: data engineering, optimized training, model compression, and deployment.
+Production-style PyTorch project for brain tumor segmentation. The repository supports two paths:
 
-> **Resume highlight:** This is not a research notebook. It is a full MLOps-style pipeline from raw data to a Dockerized FastAPI inference server.
+- A small synthetic demo path for quick CI/local runs.
+- A stronger TCGA/BraTS-style path using real pre-operative MRI NIfTI volumes with expert segmentation masks.
+
+> Portfolio angle: this is not only model training. It covers data preparation, PyTorch training, metrics, quantization, ONNX export, FastAPI serving, and Docker deployment.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A[Synthetic BraTS Data] --> B[Streaming Dataset + Albumentations]
-    B --> C[U-Net Training]
-    C --> D[AMP + OneCycleLR]
-    D --> E[PTQ Quantization INT8]
+    A[TCGA/BraTS NIfTI Volumes] --> B[Compact Slice Extraction]
+    B --> C[4-Channel Dataset: T1 + T1-Gd + T2 + FLAIR]
+    C --> D[U-Net Segmentation]
+    D --> E[Dice + Cross-Entropy Loss]
     E --> F[ONNX Export]
     F --> G[FastAPI + Docker]
 ```
 
-## Features
+## What The Model Predicts
 
-| Component | Implementation |
-|-----------|----------------|
-| **Data Pipeline** | Custom `Dataset` with on-the-fly disk streaming, Albumentations augmentation, optimized `DataLoader` |
-| **Training** | U-Net, Combined CE+Dice loss, **Automatic Mixed Precision (AMP)**, **OneCycleLR** scheduler |
-| **Quantization** | Post-Training Static Quantization via `torch.ao.quantization` (INT8) |
-| **Deployment** | ONNX export → FastAPI REST API → Docker container |
+The model performs binary semantic segmentation:
 
-## Quick Start
+- Class 0: background / non-tumor
+- Class 1: tumor region
 
-### 1. Install dependencies
+It predicts a mask, then the API reports `tumor_pixel_ratio`. A simple `tumor_detected` flag is derived by thresholding that ratio, but this is a portfolio/demo decision rule, not a clinical diagnosis.
+
+## Quick Synthetic Demo
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # Linux/macOS
+.venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-### 2. Run the full pipeline
-
-```bash
 python scripts/run_pipeline.py --epochs 5
 ```
 
-This executes: **generate data → train → quantize → export ONNX**
+## TCGA/BraTS Real-Data Workflow
 
-### 3. Start the inference API
+Expected raw folder:
 
-```bash
-python scripts/serve.py
+```text
+data/Pre-operative_TCGA_GBM_NIfTI_and_Segmentations/
+  TCGA-02-0006/
+    *_t1.nii.gz
+    *_t1Gd.nii.gz
+    *_t2.nii.gz
+    *_flair.nii.gz
+    *_GlistrBoost_ManuallyCorrected.nii.gz
 ```
 
-Open [http://localhost:8000/docs](http://localhost:8000/docs) for interactive Swagger UI.
-
-### 4. Docker deployment
+Prepare a compact portfolio-sized subset:
 
 ```bash
-docker compose up --build
+python scripts/prepare_brats.py --config configs/brats.yaml --overwrite
+```
+
+This creates:
+
+```text
+data/BraTS/
+  images/*.npy      # 4-channel slices: T1, T1-Gd, T2, FLAIR
+  masks/*.png       # binary tumor masks
+  previews/*.png    # FLAIR previews for visual checks
+  manifest.json
+  summary.json
+```
+
+Train on the compact real-data subset:
+
+```bash
+python scripts/train.py --config configs/brats.yaml --epochs 8
+python scripts/export_onnx.py --config configs/brats.yaml
+python scripts/serve.py --config configs/brats.yaml
 ```
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/health` | Service health check |
-| `POST` | `/predict` | Upload MRI image → JSON with tumor ratio & latency |
-| `POST` | `/predict/mask` | Upload MRI image → PNG segmentation mask |
+| Method | Endpoint | Output |
+| --- | --- | --- |
+| `GET` | `/health` | Model readiness and channel count |
+| `POST` | `/predict` | Single-image demo prediction JSON |
+| `POST` | `/predict/mask` | Single-image demo mask PNG |
+| `POST` | `/predict/multimodal` | Real 4-modality prediction JSON |
+| `POST` | `/predict/multimodal/mask` | Real 4-modality mask PNG |
 
-**Example (curl):**
+For the real BraTS model, use `/predict/multimodal` with four files named `t1`, `t1gd`, `t2`, and `flair`.
 
-```bash
-curl -X POST "http://localhost:8000/predict" \
-  -F "file=@data/processed/images/sample_0000.png"
-```
+## Metrics
+
+Training reports:
+
+- Dice score: overlap quality, primary segmentation metric.
+- IoU score: intersection over union.
+- Combined loss: `0.5 * CrossEntropyLoss + 0.5 * DiceLoss`.
 
 ## Project Structure
 
-```
-├── configs/default.yaml       # Central configuration
-├── scripts/
-│   ├── generate_data.py       # Synthetic BraTS-style data
-│   ├── train.py               # AMP training loop
-│   ├── quantize.py            # PTQ INT8 compression
-│   ├── export_onnx.py         # ONNX export
-│   ├── serve.py               # FastAPI server
-│   └── run_pipeline.py        # End-to-end runner
-├── src/
-│   ├── data/                  # Dataset, transforms, synthetic generator
-│   ├── models/                # U-Net architecture
-│   ├── training/              # Trainer, losses, metrics
-│   ├── optimization/          # Quantization engine
-│   └── deployment/            # ONNX export + FastAPI
-├── Dockerfile
-└── docker-compose.yml
-```
-
-## Using Real Data (BraTS / Custom)
-
-Place your data in this layout:
-
-```
-data/processed/
-├── images/
-│   ├── case_001.png
-│   └── ...
-└── masks/
-    ├── case_001.png
-    └── ...
+```text
+configs/
+  default.yaml       # synthetic demo config
+  brats.yaml         # real TCGA/BraTS config
+scripts/
+  prepare_brats.py   # compact real-data extraction
+  generate_data.py
+  train.py
+  quantize.py
+  export_onnx.py
+  serve.py
+  run_pipeline.py
+src/
+  data/
+  models/
+  training/
+  optimization/
+  deployment/
 ```
 
-Then run `python scripts/train.py`. The `SegmentationDataset` streams from disk — no in-memory loading.
+## Notes
 
-## Configuration
+The downloaded paper figure JPGs are useful for understanding MRI modalities and labels, but they are not suitable training data. The real training data is the NIfTI volume set with aligned modalities and segmentation masks.
 
-Edit `configs/default.yaml` to tune:
-
-- `data.batch_size`, `data.num_workers`, `data.image_size`
-- `training.amp`, `training.onecycle.*`
-- `quantization.calibration_samples`
-- `deployment.port`
-
-## Tech Stack
-
-- **PyTorch 2.x** — training, AMP, quantization
-- **Albumentations** — medical image augmentation
-- **ONNX + ONNX Runtime** — portable inference
-- **FastAPI + Uvicorn** — production API
-- **Docker** — containerized deployment
-
-## License
-
-MIT
+Medical disclaimer: this is a portfolio/research engineering project, not a clinically validated diagnostic product.

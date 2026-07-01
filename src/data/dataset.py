@@ -73,20 +73,44 @@ class SegmentationDataset(Dataset):
                 )
         return samples
 
+    def _resolve_path(self, value: str) -> Path:
+        path = Path(value)
+        if path.is_absolute():
+            return path
+        return self.data_dir / path
+
+    def _load_image(self, image_path: Path) -> np.ndarray:
+        if image_path.suffix == ".npy":
+            image = np.load(image_path).astype(np.float32)
+            if image.ndim == 3 and image.shape[0] <= 8 and image.shape[-1] > 8:
+                image = np.moveaxis(image, 0, -1)
+        else:
+            image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+            if image is None:
+                raise RuntimeError(f"Failed to load image: {image_path}")
+            image = image.astype(np.float32) / 255.0
+
+        if image.ndim not in (2, 3):
+            raise ValueError(f"Expected 2D or 3D image array, got shape {image.shape}")
+        return np.clip(image, 0.0, 1.0).astype(np.float32)
+
+    def _load_mask(self, mask_path: Path) -> np.ndarray:
+        if mask_path.suffix == ".npy":
+            mask = np.load(mask_path)
+        else:
+            mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
+            if mask is None:
+                raise RuntimeError(f"Failed to load mask: {mask_path}")
+        return (mask > 0).astype(np.int64)
+
     def __len__(self) -> int:
         return len(self.samples)
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         sample = self.samples[index]
 
-        image = cv2.imread(sample["image"], cv2.IMREAD_GRAYSCALE)
-        mask = cv2.imread(sample["mask"], cv2.IMREAD_GRAYSCALE)
-
-        if image is None or mask is None:
-            raise RuntimeError(f"Failed to load sample {sample['id']}")
-
-        image = image.astype(np.float32) / 255.0
-        mask = (mask > 127).astype(np.int64)
+        image = self._load_image(self._resolve_path(sample["image"]))
+        mask = self._load_mask(self._resolve_path(sample["mask"]))
 
         if self.transform is not None:
             augmented = self.transform(image=image, mask=mask)
@@ -97,7 +121,11 @@ class SegmentationDataset(Dataset):
             else:
                 mask = torch.from_numpy((mask > 0).astype(np.int64))
         else:
-            image = torch.from_numpy(image).unsqueeze(0)
+            image = torch.from_numpy(image)
+            if image.ndim == 2:
+                image = image.unsqueeze(0)
+            else:
+                image = image.permute(2, 0, 1)
             mask = torch.from_numpy(mask).long()
 
         return {

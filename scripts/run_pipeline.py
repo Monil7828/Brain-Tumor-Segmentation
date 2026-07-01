@@ -9,6 +9,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from src.utils import load_config  # noqa: E402
 
 
 def run_step(label: str, cmd: list[str]) -> None:
@@ -28,9 +31,14 @@ def main() -> None:
 
     python = sys.executable
     config_flag = ["--config", args.config]
+    config = load_config(ROOT / args.config)
+    data_cfg = config["data"]
 
     if not args.skip_data:
-        run_step("Step 1: Generate Data", [python, "scripts/generate_data.py", *config_flag])
+        if data_cfg.get("source", "synthetic") == "brats":
+            run_step("Step 1: Prepare Compact BraTS Subset", [python, "scripts/prepare_brats.py", *config_flag])
+        else:
+            run_step("Step 1: Generate Data", [python, "scripts/generate_data.py", *config_flag])
 
     train_cmd = [python, "scripts/train.py", *config_flag]
     if args.epochs:
