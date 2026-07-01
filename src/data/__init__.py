@@ -1,1 +1,1 @@
-"""Data loading and augmentation."""
+"""Data loading and synthetic dataset generation."""

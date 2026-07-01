@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate synthetic BraTS-style dataset for local development."""
+"""Generate synthetic MRI-style dataset for local development."""
 
 from __future__ import annotations
 
@@ -25,11 +25,13 @@ def main() -> None:
     set_seed(config["project"]["seed"])
 
     output_dir = args.output or config["data"]["data_dir"]
+    data_cfg = config["data"]
     path = generate_dataset(
         output_dir=ROOT / output_dir,
-        num_samples=args.num_samples,
-        image_size=config["data"]["image_size"],
+        num_samples=args.num_samples or data_cfg.get("num_samples", 200),
+        image_size=data_cfg["image_size"],
         seed=config["project"]["seed"],
+        tumor_ratio=data_cfg.get("tumor_ratio", 0.5),
     )
     print(f"Generated {args.num_samples} samples at {path}")
 

@@ -29,7 +29,9 @@ def main() -> None:
     load_model(
         str(ROOT / model_path),
         image_size=deploy_cfg["image_size"],
-        tumor_threshold=deploy_cfg.get("tumor_threshold", 0.005),
+        tumor_threshold=deploy_cfg.get("tumor_threshold", 0.01),
+        tumor_confidence_threshold=deploy_cfg.get("tumor_confidence_threshold", 0.5),
+        min_tumor_region_ratio=deploy_cfg.get("min_tumor_region_ratio", 0.015),
     )
 
     uvicorn.run(

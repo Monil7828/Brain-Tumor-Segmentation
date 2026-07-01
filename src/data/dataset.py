@@ -13,12 +13,7 @@ from torch.utils.data import Dataset
 
 
 class SegmentationDataset(Dataset):
-    """
-    On-the-fly streaming dataset for BraTS-style segmentation.
-
-    Loads image/mask pairs from disk without holding the full dataset in memory.
-    Supports optional Albumentations transforms for train/val pipelines.
-    """
+    """Loads grayscale PNG image/mask pairs from disk without holding the full dataset in memory."""
 
     def __init__(
         self,
@@ -80,27 +75,15 @@ class SegmentationDataset(Dataset):
         return self.data_dir / path
 
     def _load_image(self, image_path: Path) -> np.ndarray:
-        if image_path.suffix == ".npy":
-            image = np.load(image_path).astype(np.float32)
-            if image.ndim == 3 and image.shape[0] <= 8 and image.shape[-1] > 8:
-                image = np.moveaxis(image, 0, -1)
-        else:
-            image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
-            if image is None:
-                raise RuntimeError(f"Failed to load image: {image_path}")
-            image = image.astype(np.float32) / 255.0
-
-        if image.ndim not in (2, 3):
-            raise ValueError(f"Expected 2D or 3D image array, got shape {image.shape}")
-        return np.clip(image, 0.0, 1.0).astype(np.float32)
+        image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+        if image is None:
+            raise RuntimeError(f"Failed to load image: {image_path}")
+        return (image.astype(np.float32) / 255.0).clip(0.0, 1.0)
 
     def _load_mask(self, mask_path: Path) -> np.ndarray:
-        if mask_path.suffix == ".npy":
-            mask = np.load(mask_path)
-        else:
-            mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
-            if mask is None:
-                raise RuntimeError(f"Failed to load mask: {mask_path}")
+        mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
+        if mask is None:
+            raise RuntimeError(f"Failed to load mask: {mask_path}")
         return (mask > 0).astype(np.int64)
 
     def __len__(self) -> int:
@@ -121,11 +104,7 @@ class SegmentationDataset(Dataset):
             else:
                 mask = torch.from_numpy((mask > 0).astype(np.int64))
         else:
-            image = torch.from_numpy(image)
-            if image.ndim == 2:
-                image = image.unsqueeze(0)
-            else:
-                image = image.permute(2, 0, 1)
+            image = torch.from_numpy(image).unsqueeze(0)
             mask = torch.from_numpy(mask).long()
 
         return {

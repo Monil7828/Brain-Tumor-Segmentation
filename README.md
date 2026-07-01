@@ -1,125 +1,131 @@
 # End-to-End Brain Tumor Segmentation Pipeline
 
-Production-style PyTorch project for brain tumor segmentation. The repository supports two paths:
+Production-style PyTorch project for brain tumor **segmentation** on synthetic MRI-style images. It covers data generation, U-Net training, ONNX export, FastAPI serving, Docker deployment, and Render hosting.
 
-- A small synthetic demo path for quick CI/local runs.
-- A stronger TCGA/BraTS-style path using real pre-operative MRI NIfTI volumes with expert segmentation masks.
+**Medical disclaimer:** This is a portfolio/research engineering demo, not a clinically validated diagnostic product.
 
-> Portfolio angle: this is not only model training. It covers data preparation, PyTorch training, metrics, quantization, ONNX export, FastAPI serving, and Docker deployment.
+## How It Works
 
-## Architecture
+### Model
 
-```mermaid
-flowchart LR
-    A[TCGA/BraTS NIfTI Volumes] --> B[Compact Slice Extraction]
-    B --> C[4-Channel Dataset: T1 + T1-Gd + T2 + FLAIR]
-    C --> D[U-Net Segmentation]
-    D --> E[Dice + Cross-Entropy Loss]
-    E --> F[ONNX Export]
-    F --> G[FastAPI + Docker]
-```
+| Item | Value |
+| --- | --- |
+| Architecture | U-Net (`src/models/unet.py`) |
+| Input | 1-channel grayscale MRI, resized to 256×256 |
+| Output | 2-class pixel logits: background (0) and tumor (1) |
+| Deployed format | ONNX via ONNX Runtime (`checkpoints/model.onnx`) |
 
-## What The Model Predicts
+### Training data
 
-The model performs binary semantic segmentation:
+The model is trained on **synthetic** images generated in `src/data/synthetic.py`:
 
-- Class 0: background / non-tumor
-- Class 1: tumor region
+- ~50% samples contain bright circular tumor blobs
+- ~50% samples are tumor-free (brain outline + noise only)
+- Loss: 50% CrossEntropy + 50% Dice
+- Metrics: **Dice** and **IoU** on validation split
 
-It predicts a mask, then the API reports `tumor_pixel_ratio`. A simple `tumor_detected` flag is derived by thresholding that ratio, but this is a portfolio/demo decision rule, not a clinical diagnosis.
+Because training uses synthetic shapes—not real BraTS or clinical MRI—the model will not generalize perfectly to arbitrary real-world scans.
 
-## Quick Synthetic Demo
+### Segmentation
+
+For each uploaded image the API:
+
+1. Converts to grayscale and resizes to 256×256
+2. Normalizes pixels to `(x - 0.5) / 0.5`
+3. Runs ONNX inference to get per-pixel class probabilities
+4. Builds a mask where `P(tumor) >= 0.5`
+
+### Tumor detection (`tumor_detected`)
+
+Detection is **derived from the segmentation mask**, not a separate classifier. A scan is flagged as tumor-positive only when **all three** conditions pass:
+
+| Rule | Default | Meaning |
+| --- | --- | --- |
+| `tumor_pixel_ratio >= tumor_threshold` | **1.0%** | At least 1% of pixels are confident tumor |
+| `largest_tumor_region_ratio >= min_tumor_region_ratio` | **1.5%** | Largest connected tumor blob is ≥1.5% of image |
+| `tumor_confidence >= tumor_confidence_threshold` | **50%** | Average tumor-class probability on detected pixels ≥0.5 |
+
+There is no single "tumor percentage" score—the API returns the ratios above plus `tumor_confidence` (mean softmax probability for tumor class on flagged pixels).
+
+## Quick Start
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-python scripts/run_pipeline.py --epochs 5
+python scripts/run_pipeline.py --epochs 10
+python scripts/serve.py
 ```
 
-## TCGA/BraTS Real-Data Workflow
-
-Expected raw folder:
-
-```text
-data/Pre-operative_TCGA_GBM_NIfTI_and_Segmentations/
-  TCGA-02-0006/
-    *_t1.nii.gz
-    *_t1Gd.nii.gz
-    *_t2.nii.gz
-    *_flair.nii.gz
-    *_GlistrBoost_ManuallyCorrected.nii.gz
-```
-
-Prepare a compact portfolio-sized subset:
-
-```bash
-python scripts/prepare_brats.py --config configs/brats.yaml --overwrite
-```
-
-This creates:
-
-```text
-data/BraTS/
-  images/*.npy      # 4-channel slices: T1, T1-Gd, T2, FLAIR
-  masks/*.png       # binary tumor masks
-  previews/*.png    # FLAIR previews for visual checks
-  manifest.json
-  summary.json
-```
-
-Train on the compact real-data subset:
-
-```bash
-python scripts/train.py --config configs/brats.yaml --epochs 8
-python scripts/export_onnx.py --config configs/brats.yaml
-python scripts/serve.py --config configs/brats.yaml
-```
+API docs: http://localhost:8000/docs
 
 ## API Endpoints
 
 | Method | Endpoint | Output |
 | --- | --- | --- |
-| `GET` | `/health` | Model readiness and channel count |
-| `POST` | `/predict` | Single-image demo prediction JSON |
-| `POST` | `/predict/mask` | Single-image demo mask PNG |
-| `POST` | `/predict/multimodal` | Real 4-modality prediction JSON |
-| `POST` | `/predict/multimodal/mask` | Real 4-modality mask PNG |
+| `GET` | `/health` | `{"status": "ready"}` or `"model_not_loaded"` |
+| `POST` | `/predict` | JSON with segmentation-derived metrics (see below) |
+| `POST` | `/predict/mask` | PNG binary mask (white = predicted tumor) |
 
-For the real BraTS model, use `/predict/multimodal` with four files named `t1`, `t1gd`, `t2`, and `flair`.
+### `/predict` response example
 
-## Metrics
+```json
+{
+  "latency_ms": 65.2,
+  "tumor_pixel_ratio": 0.2236,
+  "largest_tumor_region_ratio": 0.2236,
+  "tumor_confidence": 0.9213,
+  "tumor_detected": true,
+  "tumor_threshold": 0.01,
+  "tumor_confidence_threshold": 0.5,
+  "min_tumor_region_ratio": 0.015,
+  "mean_confidence": 0.9069,
+  "image_size": 256
+}
+```
 
-Training reports:
+## Deploy on Render
 
-- Dice score: overlap quality, primary segmentation metric.
-- IoU score: intersection over union.
-- Combined loss: `0.5 * CrossEntropyLoss + 0.5 * DiceLoss`.
+1. Push this repo to GitHub.
+2. In [Render Dashboard](https://dashboard.render.com), click **New → Blueprint**.
+3. Connect the repo—Render reads `render.yaml` at the repo root.
+4. Render builds `deploy/Dockerfile`, which copies the committed ONNX model and starts the FastAPI server.
+5. Health check: `GET /health`
+6. Test inference: `POST /predict` with a multipart image upload.
+
+Environment variables (set automatically by `render.yaml`):
+
+| Variable | Default |
+| --- | --- |
+| `MODEL_PATH` | `checkpoints/model.onnx` |
+| `IMAGE_SIZE` | `256` |
+| `TUMOR_THRESHOLD` | `0.01` |
+| `TUMOR_CONFIDENCE_THRESHOLD` | `0.5` |
+| `MIN_TUMOR_REGION_RATIO` | `0.015` |
+
+### Local Docker
+
+```bash
+docker compose -f deploy/docker-compose.yml up --build
+```
 
 ## Project Structure
 
 ```text
-configs/
-  default.yaml       # synthetic demo config
-  brats.yaml         # real TCGA/BraTS config
-scripts/
-  prepare_brats.py   # compact real-data extraction
-  generate_data.py
-  train.py
-  quantize.py
-  export_onnx.py
-  serve.py
-  run_pipeline.py
-src/
-  data/
-  models/
-  training/
-  optimization/
-  deployment/
+configs/default.yaml   # Training + deployment settings
+deploy/                # Dockerfile, docker-compose, inference deps
+scripts/               # generate_data, train, export, serve, run_pipeline
+src/data/              # Synthetic dataset + loaders
+src/models/            # U-Net
+src/training/          # Trainer, losses, metrics
+src/deployment/        # FastAPI + ONNX export
+tests/                 # Smoke tests
+checkpoints/model.onnx # Deployed model artifact
+render.yaml            # Render Blueprint
 ```
 
-## Notes
+## Tests
 
-The downloaded paper figure JPGs are useful for understanding MRI modalities and labels, but they are not suitable training data. The real training data is the NIfTI volume set with aligned modalities and segmentation masks.
-
-Medical disclaimer: this is a portfolio/research engineering project, not a clinically validated diagnostic product.
+```bash
+python tests/test_pipeline.py
+```

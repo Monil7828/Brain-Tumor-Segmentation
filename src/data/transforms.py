@@ -9,12 +9,7 @@ import cv2
 from albumentations.pytorch import ToTensorV2
 
 
-def _channel_stats(in_channels: int) -> tuple[tuple[float, ...], tuple[float, ...]]:
-    return (0.5,) * in_channels, (0.5,) * in_channels
-
-
-def build_train_transforms(image_size: int, aug_cfg: dict[str, Any], in_channels: int = 1) -> A.Compose:
-    mean, std = _channel_stats(in_channels)
+def build_train_transforms(image_size: int, aug_cfg: dict[str, Any]) -> A.Compose:
     return A.Compose(
         [
             A.Resize(image_size, image_size),
@@ -33,18 +28,17 @@ def build_train_transforms(image_size: int, aug_cfg: dict[str, Any], in_channels
                 p=0.5,
             ),
             A.GaussNoise(std_range=(0.04, 0.12), p=0.3),
-            A.Normalize(mean=mean, std=std, max_pixel_value=1.0),
+            A.Normalize(mean=(0.5,), std=(0.5,), max_pixel_value=1.0),
             ToTensorV2(),
         ]
     )
 
 
-def build_val_transforms(image_size: int, in_channels: int = 1) -> A.Compose:
-    mean, std = _channel_stats(in_channels)
+def build_val_transforms(image_size: int) -> A.Compose:
     return A.Compose(
         [
             A.Resize(image_size, image_size),
-            A.Normalize(mean=mean, std=std, max_pixel_value=1.0),
+            A.Normalize(mean=(0.5,), std=(0.5,), max_pixel_value=1.0),
             ToTensorV2(),
         ]
     )

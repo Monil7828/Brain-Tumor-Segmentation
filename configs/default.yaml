@@ -3,7 +3,6 @@ project:
   seed: 42
 
 data:
-  source: "synthetic"
   data_dir: "data/processed"
   image_size: 256
   num_classes: 2
@@ -11,6 +10,8 @@ data:
   num_workers: 4
   pin_memory: true
   batch_size: 8
+  num_samples: 200
+  tumor_ratio: 0.5
 
 augmentation:
   train:
@@ -41,10 +42,6 @@ training:
     div_factor: 25.0
     final_div_factor: 10000.0
 
-quantization:
-  calibration_samples: 32
-  output_path: "checkpoints/model_quantized.pt"
-
 export:
   onnx_path: "checkpoints/model.onnx"
   opset_version: 17
@@ -55,4 +52,6 @@ deployment:
   port: 8000
   model_path: "checkpoints/model.onnx"
   image_size: 256
-  tumor_threshold: 0.005
+  tumor_threshold: 0.01
+  tumor_confidence_threshold: 0.5
+  min_tumor_region_ratio: 0.015

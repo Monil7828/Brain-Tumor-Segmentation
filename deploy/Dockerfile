@@ -19,7 +19,6 @@ RUN if [ ! -f checkpoints/model.onnx ]; then \
       python scripts/export_onnx.py; \
     fi
 
-# Slim runtime image for serving (no PyTorch).
 FROM python:3.11-slim AS runtime
 
 WORKDIR /app
@@ -29,7 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements-inference.txt .
+COPY deploy/requirements-inference.txt requirements-inference.txt
 RUN pip install --no-cache-dir -r requirements-inference.txt
 
 COPY src/ ./src/
@@ -38,7 +37,9 @@ COPY --from=builder /app/checkpoints/ ./checkpoints/
 
 ENV MODEL_PATH=checkpoints/model.onnx \
     IMAGE_SIZE=256 \
-    TUMOR_THRESHOLD=0.005
+    TUMOR_THRESHOLD=0.01 \
+    TUMOR_CONFIDENCE_THRESHOLD=0.5 \
+    MIN_TUMOR_REGION_RATIO=0.015
 
 EXPOSE 8000
 

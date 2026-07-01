@@ -1,4 +1,4 @@
-"""Synthetic BraTS-style MRI data generator for demo and CI runs."""
+"""Synthetic MRI data generator for demo and CI runs."""
 
 from __future__ import annotations
 
@@ -49,9 +49,17 @@ def _add_noise_and_texture(image: np.ndarray, rng: np.random.Generator) -> np.nd
     return np.clip(0.7 * image + 0.3 * blur, 0.0, 1.0)
 
 
-def generate_sample(size: int, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+def generate_sample(
+    size: int,
+    rng: np.random.Generator,
+    *,
+    with_tumor: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
     image = _draw_brain_outline(size)
-    image, mask = _add_tumor(image, rng)
+    if with_tumor:
+        image, mask = _add_tumor(image, rng)
+    else:
+        mask = np.zeros((size, size), dtype=np.float32)
     image = _add_noise_and_texture(image, rng)
     return image, mask
 
@@ -61,6 +69,7 @@ def generate_dataset(
     num_samples: int = 200,
     image_size: int = 256,
     seed: int = 42,
+    tumor_ratio: float = 0.5,
 ) -> Path:
     """Write synthetic grayscale MRI-style images and masks to disk."""
     output = Path(output_dir)
@@ -72,15 +81,26 @@ def generate_dataset(
     rng = np.random.default_rng(seed)
     manifest = []
 
-    for idx in range(num_samples):
-        image, mask = generate_sample(image_size, rng)
+    num_tumor = int(round(num_samples * tumor_ratio))
+    tumor_flags = [True] * num_tumor + [False] * (num_samples - num_tumor)
+    rng.shuffle(tumor_flags)
+
+    for idx, has_tumor in enumerate(tumor_flags):
+        image, mask = generate_sample(image_size, rng, with_tumor=has_tumor)
         stem = f"sample_{idx:04d}"
         image_path = images_dir / f"{stem}.png"
         mask_path = masks_dir / f"{stem}.png"
 
         cv2.imwrite(str(image_path), (image * 255).astype(np.uint8))
         cv2.imwrite(str(mask_path), (mask * 255).astype(np.uint8))
-        manifest.append({"id": stem, "image": str(image_path), "mask": str(mask_path)})
+        manifest.append(
+            {
+                "id": stem,
+                "image": str(image_path),
+                "mask": str(mask_path),
+                "has_tumor": has_tumor,
+            }
+        )
 
     with open(output / "manifest.json", "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)

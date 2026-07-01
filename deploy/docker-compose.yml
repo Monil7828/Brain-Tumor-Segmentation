@@ -1,15 +1,17 @@
 services:
   segmentation-api:
-    build: .
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
     ports:
       - "8000:8000"
-    volumes:
-      - ./checkpoints:/app/checkpoints
     environment:
       - PYTHONUNBUFFERED=1
       - MODEL_PATH=checkpoints/model.onnx
       - IMAGE_SIZE=256
-      - TUMOR_THRESHOLD=0.005
+      - TUMOR_THRESHOLD=0.01
+      - TUMOR_CONFIDENCE_THRESHOLD=0.5
+      - MIN_TUMOR_REGION_RATIO=0.015
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
