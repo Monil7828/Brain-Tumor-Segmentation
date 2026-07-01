@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: brain-tumor-segmentation-api
+    runtime: docker
+    plan: standard
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: MODEL_PATH
+        value: checkpoints/model.onnx
+      - key: IMAGE_SIZE
+        value: "256"
+      - key: TUMOR_THRESHOLD
+        value: "0.005"

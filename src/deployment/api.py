@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,20 @@ _session: ort.InferenceSession | None = None
 _image_size: int = 256
 _input_channels: int = 1
 _tumor_threshold: float = 0.005
+
+
+def _project_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _deployment_settings() -> tuple[Path, int, float]:
+    root = _project_root()
+    model_path = Path(os.environ.get("MODEL_PATH", "checkpoints/model.onnx"))
+    if not model_path.is_absolute():
+        model_path = root / model_path
+    image_size = int(os.environ.get("IMAGE_SIZE", "256"))
+    tumor_threshold = float(os.environ.get("TUMOR_THRESHOLD", "0.005"))
+    return model_path, image_size, tumor_threshold
 
 
 def load_model(model_path: str, image_size: int = 256, tumor_threshold: float = 0.005) -> None:
@@ -120,9 +135,9 @@ def _prediction_payload(
 async def startup() -> None:
     if _session is not None:
         return
-    model_path = Path(__file__).resolve().parents[2] / "checkpoints" / "model.onnx"
+    model_path, image_size, tumor_threshold = _deployment_settings()
     if model_path.exists():
-        load_model(str(model_path))
+        load_model(str(model_path), image_size=image_size, tumor_threshold=tumor_threshold)
 
 
 @app.get("/health")

@@ -7,6 +7,9 @@ services:
       - ./checkpoints:/app/checkpoints
     environment:
       - PYTHONUNBUFFERED=1
+      - MODEL_PATH=checkpoints/model.onnx
+      - IMAGE_SIZE=256
+      - TUMOR_THRESHOLD=0.005
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
